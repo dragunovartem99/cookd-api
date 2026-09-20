@@ -7,7 +7,7 @@ import (
 	"testing"
 )
 
-func TestSearchKeepsOnlyCookableDishes(t *testing.T) {
+func TestSearchOffersCookableDishesThenNearMisses(t *testing.T) {
 	var calls atomic.Int32
 	c := fakeAPI(t, &calls)
 
@@ -15,8 +15,14 @@ func TestSearchKeepsOnlyCookableDishes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(got) != 2 || got[0].Title != "Frittata" || got[0].Minutes != 20 || got[0].URL != "https://example.com/frittata" {
+	if len(got) != 3 || got[0].Title != "Frittata" || got[0].Minutes != 20 || got[0].URL != "https://example.com/frittata" {
 		t.Errorf("Search = %+v", got)
+	}
+	if last := got[2]; last.Title != "Cheesecake" || len(last.Missing) != 1 || last.Missing[0] != "cream cheese" {
+		t.Errorf("near miss = %+v, want it last with its missing item", last)
+	}
+	if len(got[0].Missing) != 0 {
+		t.Errorf("Frittata Missing = %v, want none", got[0].Missing)
 	}
 }
 

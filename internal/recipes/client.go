@@ -20,6 +20,9 @@ const (
 	candidates = 20
 	// maxResults is how many dishes a search hands back.
 	maxResults = 5
+	// maxMissing is how many items a dish may lack and still be offered, so an
+	// empty result can turn into "buy this one thing".
+	maxMissing = 1
 )
 
 type Client struct {
@@ -34,7 +37,9 @@ func NewClient(apiKey string) *Client {
 }
 
 // Search finds dishes that can be cooked from the ingredients alone (salt,
-// pepper, oil and water are assumed), best use of the pantry first. Every
+// pepper, oil and water are assumed) or with one more item, which the result
+// names in Missing. Fully cookable dishes come first, then the best use of
+// the pantry. Every
 // result carries its full recipe in the cache, so Get on it costs nothing.
 func (c *Client) Search(ctx context.Context, ingredients []string) ([]Summary, error) {
 	key := "search:" + strings.ToLower(strings.Join(ingredients, ","))
@@ -50,8 +55,17 @@ func (c *Client) Search(ctx context.Context, ingredients []string) ([]Summary, e
 	if err != nil {
 		return nil, err
 	}
-	found = slices.DeleteFunc(found, func(r apiRecipe) bool { return !r.cookable() })
-	slices.SortStableFunc(found, func(a, b apiRecipe) int { return b.UsedIngredientCount - a.UsedIngredientCount })
+	missing := map[int][]string{}
+	for _, r := range found {
+		missing[r.ID] = r.missing()
+	}
+	found = slices.DeleteFunc(found, func(r apiRecipe) bool { return len(missing[r.ID]) > maxMissing })
+	slices.SortStableFunc(found, func(a, b apiRecipe) int {
+		if d := len(missing[a.ID]) - len(missing[b.ID]); d != 0 {
+			return d
+		}
+		return b.UsedIngredientCount - a.UsedIngredientCount
+	})
 	found = found[:min(len(found), maxResults)]
 
 	results := []Summary{}
@@ -64,10 +78,18 @@ func (c *Client) Search(ctx context.Context, ingredients []string) ([]Summary, e
 		if err := c.get(ctx, "/recipes/informationBulk", url.Values{"ids": {strings.Join(ids, ",")}}, &full); err != nil {
 			return nil, err
 		}
+		byID := map[int]Recipe{}
 		for _, a := range full {
 			r := a.recipe()
 			c.cache.put("recipe:"+strconv.Itoa(r.ID), r)
-			results = append(results, r.Summary)
+			byID[r.ID] = r
+		}
+		// Missing depends on the pantry, so it stays out of the cached recipe.
+		for _, f := range found {
+			if r, ok := byID[f.ID]; ok {
+				r.Missing = missing[f.ID]
+				results = append(results, r.Summary)
+			}
 		}
 	}
 	c.cache.put(key, results)

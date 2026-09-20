@@ -19,7 +19,8 @@ const bulk = `[
  {"id":2,"title":"Frittata","readyInMinutes":20,"sourceUrl":"https://example.com/frittata",
   "extendedIngredients":[{"original":"3 eggs"}],
   "analyzedInstructions":[{"steps":[{"step":"Whisk."},{"step":"Bake."}]}]},
- {"id":1,"title":"Omelette","readyInMinutes":10,"sourceUrl":"https://example.com/omelette"}
+ {"id":1,"title":"Omelette","readyInMinutes":10,"sourceUrl":"https://example.com/omelette"},
+ {"id":3,"title":"Cheesecake","readyInMinutes":60,"sourceUrl":"https://example.com/cheesecake"}
 ]`
 
 func fakeAPI(t *testing.T, calls *atomic.Int32) *Client {
@@ -37,8 +38,8 @@ func fakeAPI(t *testing.T, calls *atomic.Int32) *Client {
 			}
 			_, _ = w.Write([]byte(found))
 		case r.URL.Path == "/recipes/informationBulk":
-			if got := r.URL.Query().Get("ids"); got != "2,1,4" {
-				t.Errorf("ids = %q, want the cookable ones, most-used first", got)
+			if got := r.URL.Query().Get("ids"); got != "2,1,4,3" {
+				t.Errorf("ids = %q, want the cookable ones first, most-used first", got)
 			}
 			_, _ = w.Write([]byte(bulk))
 		case strings.HasSuffix(r.URL.Path, "/information"):

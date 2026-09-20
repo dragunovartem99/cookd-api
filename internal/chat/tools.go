@@ -23,12 +23,12 @@ func tools() []anthropic.ToolUnionParam {
 	return []anthropic.ToolUnionParam{
 		{OfTool: &anthropic.ToolParam{
 			Name:        "search_recipes",
-			Description: anthropic.String("Find real published recipes that can be cooked from the given ingredients alone (salt, pepper, oil and water are assumed). Returns up to 5 dishes with id, title, minutes and source url."),
+			Description: anthropic.String("Find real published recipes that can be cooked from the given ingredients alone (salt, pepper, oil and water are assumed). Fully covered dishes come first; a dish may name one missing item to buy. Returns up to 5 dishes with id, title, minutes and source url."),
 			InputSchema: anthropic.ToolInputSchemaParam{
 				Properties: map[string]any{"ingredients": map[string]any{
 					"type":        "array",
 					"items":       map[string]any{"type": "string"},
-					"description": "Available pantry ingredients, in English",
+					"description": "Available pantry ingredients as plain generic English food names; no supplements or additives",
 				}},
 				Required: []string{"ingredients"},
 			},
@@ -78,7 +78,7 @@ func (c *Claude) runTool(ctx context.Context, use anthropic.ToolUseBlock) (strin
 			return "", err
 		}
 		if len(found) == 0 {
-			return "No dish can be cooked from these ingredients alone.", nil
+			return "No dish can be cooked from these ingredients, even with one more item.", nil
 		}
 		value = found
 	case "get_recipe":

@@ -9,6 +9,8 @@ type Summary struct {
 	Minutes int    `json:"minutes"`
 	// URL is the page the recipe was published on.
 	URL string `json:"url"`
+	// Missing is the one item to buy to cook the dish; empty when the pantry covers it.
+	Missing []string `json:"missing,omitempty"`
 }
 
 // Recipe is a full recipe.
@@ -48,14 +50,15 @@ var staples = map[string]bool{
 	"water": true, "cold water": true, "warm water": true, "hot water": true, "boiling water": true,
 }
 
-// cookable reports whether nothing but staples is missing.
-func (a apiRecipe) cookable() bool {
+// missing lists what the recipe needs besides the pantry and the staples.
+func (a apiRecipe) missing() []string {
+	var out []string
 	for _, m := range a.MissedIngredients {
-		if !staples[strings.ToLower(strings.TrimSpace(m.Name))] {
-			return false
+		if name := strings.ToLower(strings.TrimSpace(m.Name)); !staples[name] {
+			out = append(out, name)
 		}
 	}
-	return true
+	return out
 }
 
 func (a apiRecipe) recipe() Recipe {

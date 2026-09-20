@@ -17,6 +17,10 @@ const (
 	// maxTokens leaves room for adaptive thinking on top of a full recipe;
 	// the reply is streamed, so a large ceiling does not risk a request timeout.
 	maxTokens = 32000
+	// maxSearches caps web searches per turn: enough to check a few dishes.
+	maxSearches = 3
+	// maxPauses caps how often a paused search turn is resumed.
+	maxPauses = 3
 )
 
 // Result is a finished reply.
@@ -38,11 +42,36 @@ func NewClaude(apiKey string) *Claude {
 // the answer as it arrives. history must end with the user's new message;
 // memory is shown to the model alongside that message.
 func (c *Claude) Stream(ctx context.Context, history []store.Message, memory Memory, onDelta func(string)) (Result, error) {
+	messages := toParams(history, memory)
+	var text string
+	// A turn with web searches can pause mid-way; resend it to let the model finish.
+	for range maxPauses {
+		message, err := c.streamOnce(ctx, messages, onDelta)
+		if err != nil {
+			return Result{}, err
+		}
+		for _, block := range message.Content {
+			if t, ok := block.AsAny().(anthropic.TextBlock); ok {
+				text += t.Text
+			}
+		}
+		if message.StopReason != anthropic.StopReasonPauseTurn {
+			return Result{Text: text, StopReason: string(message.StopReason)}, nil
+		}
+		messages = append(messages, message.ToParam())
+	}
+	return Result{Text: text, StopReason: string(anthropic.StopReasonPauseTurn)}, nil
+}
+
+func (c *Claude) streamOnce(ctx context.Context, messages []anthropic.MessageParam, onDelta func(string)) (anthropic.Message, error) {
 	stream := c.client.Messages.NewStreaming(ctx, anthropic.MessageNewParams{
 		Model:     model,
 		MaxTokens: maxTokens,
 		System:    []anthropic.TextBlockParam{{Text: systemPrompt}},
-		Messages:  toParams(history, memory),
+		Messages:  messages,
+		Tools: []anthropic.ToolUnionParam{{
+			OfWebSearchTool20250305: &anthropic.WebSearchTool20250305Param{MaxUses: anthropic.Int(maxSearches)},
+		}},
 		// Chat wants quick answers; the default effort thinks longer than a
 		// "what can I make with eggs" question deserves.
 		OutputConfig: anthropic.OutputConfigParam{Effort: anthropic.OutputConfigEffortMedium},
@@ -54,7 +83,7 @@ func (c *Claude) Stream(ctx context.Context, history []store.Message, memory Mem
 	for stream.Next() {
 		event := stream.Current()
 		if err := message.Accumulate(event); err != nil {
-			return Result{}, fmt.Errorf("accumulate stream: %w", err)
+			return message, fmt.Errorf("accumulate stream: %w", err)
 		}
 		if delta, ok := event.AsAny().(anthropic.ContentBlockDeltaEvent); ok {
 			if text, ok := delta.Delta.AsAny().(anthropic.TextDelta); ok {
@@ -62,17 +91,7 @@ func (c *Claude) Stream(ctx context.Context, history []store.Message, memory Mem
 			}
 		}
 	}
-	if err := stream.Err(); err != nil {
-		return Result{}, err
-	}
-
-	var text string
-	for _, block := range message.Content {
-		if t, ok := block.AsAny().(anthropic.TextBlock); ok {
-			text += t.Text
-		}
-	}
-	return Result{Text: text, StopReason: string(message.StopReason)}, nil
+	return message, stream.Err()
 }
 
 // toParams maps stored messages to API messages, photos first so the model has

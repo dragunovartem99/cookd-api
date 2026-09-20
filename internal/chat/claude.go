@@ -3,7 +3,6 @@ package chat
 
 import (
 	"context"
-	"encoding/base64"
 	"fmt"
 
 	"github.com/anthropics/anthropic-sdk-go"
@@ -17,10 +16,9 @@ const (
 	// maxTokens leaves room for adaptive thinking on top of a full recipe;
 	// the reply is streamed, so a large ceiling does not risk a request timeout.
 	maxTokens = 32000
-	// maxSearches caps web searches per turn: enough to check a few dishes.
-	maxSearches = 3
-	// maxPauses caps how often a paused search turn is resumed.
-	maxPauses = 3
+	// maxRounds caps model calls per turn: a search, a recipe fetch and a
+	// retry or two, so a confused model cannot loop on the API bill.
+	maxRounds = 4
 )
 
 // Result is a finished reply.
@@ -31,11 +29,14 @@ type Result struct {
 }
 
 type Claude struct {
-	client anthropic.Client
+	client  anthropic.Client
+	recipes Recipes
 }
 
-func NewClaude(apiKey string) *Claude {
-	return &Claude{client: anthropic.NewClient(option.WithAPIKey(apiKey))}
+// NewClaude builds the chat. recipes may be nil: the coach then answers from
+// its own knowledge, without lookups or links.
+func NewClaude(apiKey string, recipes Recipes) *Claude {
+	return &Claude{client: anthropic.NewClient(option.WithAPIKey(apiKey)), recipes: recipes}
 }
 
 // Stream sends the conversation to Claude and calls onDelta with each piece of
@@ -44,8 +45,9 @@ func NewClaude(apiKey string) *Claude {
 func (c *Claude) Stream(ctx context.Context, history []store.Message, memory Memory, onDelta func(string)) (Result, error) {
 	messages := toParams(history, memory)
 	var text string
-	// A turn with web searches can pause mid-way; resend it to let the model finish.
-	for range maxPauses {
+	// A turn that looks up recipes takes several calls: each tool result goes
+	// back to the model, which then carries on.
+	for range maxRounds {
 		message, err := c.streamOnce(ctx, messages, onDelta)
 		if err != nil {
 			return Result{}, err
@@ -55,29 +57,30 @@ func (c *Claude) Stream(ctx context.Context, history []store.Message, memory Mem
 				text += t.Text
 			}
 		}
-		if message.StopReason != anthropic.StopReasonPauseTurn {
+		if message.StopReason != anthropic.StopReasonToolUse {
 			return Result{Text: text, StopReason: string(message.StopReason)}, nil
 		}
-		messages = append(messages, message.ToParam())
+		messages = append(messages, message.ToParam(), anthropic.NewUserMessage(c.runTools(ctx, message)...))
 	}
-	return Result{Text: text, StopReason: string(anthropic.StopReasonPauseTurn)}, nil
+	return Result{Text: text, StopReason: string(anthropic.StopReasonToolUse)}, nil
 }
 
 func (c *Claude) streamOnce(ctx context.Context, messages []anthropic.MessageParam, onDelta func(string)) (anthropic.Message, error) {
-	stream := c.client.Messages.NewStreaming(ctx, anthropic.MessageNewParams{
+	params := anthropic.MessageNewParams{
 		Model:     model,
 		MaxTokens: maxTokens,
 		System:    []anthropic.TextBlockParam{{Text: systemPrompt}},
 		Messages:  messages,
-		Tools: []anthropic.ToolUnionParam{{
-			OfWebSearchTool20250305: &anthropic.WebSearchTool20250305Param{MaxUses: anthropic.Int(maxSearches)},
-		}},
-		// Chat wants quick answers; the default effort thinks longer than a
-		// "what can I make with eggs" question deserves.
-		OutputConfig: anthropic.OutputConfigParam{Effort: anthropic.OutputConfigEffortMedium},
-		// Photos are resent every turn, so let the API cache the growing prefix.
+		// Recipes come from the lookup now, so the model mostly rewrites them:
+		// little thinking needed, and thinking is billed as output.
+		OutputConfig: anthropic.OutputConfigParam{Effort: anthropic.OutputConfigEffortLow},
+		// The history is resent every turn, so let the API cache the growing prefix.
 		CacheControl: anthropic.NewCacheControlEphemeralParam(),
-	})
+	}
+	if c.recipes != nil {
+		params.Tools = tools()
+	}
+	stream := c.client.Messages.NewStreaming(ctx, params)
 
 	message := anthropic.Message{}
 	for stream.Next() {
@@ -92,30 +95,4 @@ func (c *Claude) streamOnce(ctx context.Context, messages []anthropic.MessagePar
 		}
 	}
 	return message, stream.Err()
-}
-
-// toParams maps stored messages to API messages, photos first so the model has
-// seen them before it reads the question about them. The memory block goes
-// between the photos and the question, on the last message only: it changes
-// every turn, so keeping it at the end leaves everything before it cacheable.
-func toParams(history []store.Message, memory Memory) []anthropic.MessageParam {
-	params := make([]anthropic.MessageParam, 0, len(history))
-	for n, m := range history {
-		var blocks []anthropic.ContentBlockParamUnion
-		for _, img := range m.Images {
-			blocks = append(blocks, anthropic.NewImageBlockBase64(img.MediaType, base64.StdEncoding.EncodeToString(img.Data)))
-		}
-		if block := memory.Block(); block != "" && n == len(history)-1 {
-			blocks = append(blocks, anthropic.NewTextBlock(block))
-		}
-		if m.Text != "" {
-			blocks = append(blocks, anthropic.NewTextBlock(m.Text))
-		}
-		if m.Role == "assistant" {
-			params = append(params, anthropic.NewAssistantMessage(blocks...))
-		} else {
-			params = append(params, anthropic.NewUserMessage(blocks...))
-		}
-	}
-	return params
 }

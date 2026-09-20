@@ -27,6 +27,9 @@ type Config struct {
 	DBPath string
 	// AnthropicKey authenticates calls to the Claude API.
 	AnthropicKey string
+	// SpoonacularKey authenticates recipe lookups. Optional: blank turns them
+	// off and the coach answers from its own knowledge.
+	SpoonacularKey string
 	// GoogleClientID is the OAuth client the sign-in button is issued for; an ID
 	// token minted for any other audience is refused. Optional: blank turns
 	// Google sign-in off.
@@ -59,6 +62,7 @@ func Load() (Config, error) {
 		AllowedOrigin:  required("ALLOWED_ORIGIN"),
 		DBPath:         required("DB_PATH"),
 		AnthropicKey:   required("ANTHROPIC_API_KEY"),
+		SpoonacularKey: strings.TrimSpace(os.Getenv("SPOONACULAR_API_KEY")),
 		GoogleClientID: strings.TrimSpace(os.Getenv("GOOGLE_CLIENT_ID")),
 		AdminPassword:  os.Getenv("ADMIN_PASSWORD"),
 		AllowedEmails:  make(map[string]struct{}),

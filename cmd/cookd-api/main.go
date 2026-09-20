@@ -13,7 +13,6 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"strings"
 	"syscall"
 	"time"
 
@@ -21,6 +20,7 @@ import (
 	"github.com/dragunovartem99/cookd-api/internal/auth"
 	"github.com/dragunovartem99/cookd-api/internal/chat"
 	"github.com/dragunovartem99/cookd-api/internal/config"
+	"github.com/dragunovartem99/cookd-api/internal/recipes"
 	"github.com/dragunovartem99/cookd-api/internal/store"
 )
 
@@ -58,9 +58,15 @@ func run(log *slog.Logger) error {
 	}
 	defer db.Close()
 
+	// Left nil, not wrapped, when off, for the same reason as Google below.
+	var lookup chat.Recipes
+	if cfg.SpoonacularKey != "" {
+		lookup = recipes.NewClient(cfg.SpoonacularKey)
+	}
+
 	opts := api.Options{
 		Store:         db,
-		Chat:          chat.NewClaude(cfg.AnthropicKey),
+		Chat:          chat.NewClaude(cfg.AnthropicKey, lookup),
 		Signer:        auth.NewSigner(cfg.SessionSecret),
 		AdminPassword: cfg.AdminPassword,
 		Owner:         cfg.Owner,
@@ -110,18 +116,4 @@ func run(log *slog.Logger) error {
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), shutdownGrace)
 	defer cancel()
 	return server.Shutdown(shutdownCtx)
-}
-
-// printToken mints a 24-hour session token for local testing.
-func printToken(args []string) error {
-	if len(args) != 1 {
-		return errors.New("usage: cookd-api token <email>")
-	}
-	secret := strings.TrimSpace(os.Getenv("SESSION_SECRET"))
-	if len(secret) < 32 {
-		return errors.New("SESSION_SECRET must be set to at least 32 characters")
-	}
-	token, _ := auth.NewSigner([]byte(secret)).Issue(strings.ToLower(args[0]), 24*time.Hour)
-	fmt.Println(token)
-	return nil
 }

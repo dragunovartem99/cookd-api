@@ -1,0 +1,8 @@
+cookd.dragunov.dev {
+    # No `encode`: answers stream as Server-Sent Events, and compression would
+    # hold them back. Responses are small JSON anyway.
+    reverse_proxy localhost:50001 {
+        # Pass each chunk on as it arrives instead of buffering.
+        flush_interval -1
+    }
+}

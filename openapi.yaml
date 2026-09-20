@@ -1,0 +1,452 @@
+openapi: 3.1.0
+info:
+    title: cookd-api
+    description: |
+        A cooking coach. Send ingredients or photos, get recipes and advice streamed back from Claude.
+        Sign in once (password, or Google if the server has it switched on), then call everything
+        else with the session token as a bearer token.
+    version: 1.0.0
+servers:
+    - url: https://cookd.dragunov.dev
+security:
+    - session: []
+paths:
+    /healthz:
+        get:
+            operationId: health
+            summary: Liveness check
+            security: []
+            responses:
+                "200":
+                    description: The server is up
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                                properties:
+                                    status: { type: string, const: ok }
+    /auth/login:
+        post:
+            operationId: passwordLogin
+            summary: Trade the admin password for a session token
+            description: |
+                Signs in as the first address in the server's ALLOWED_EMAILS. Answers 404 when the
+                server has no password configured. Limited to 10 attempts per 10 minutes per address.
+            security: []
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            type: object
+                            required: [password]
+                            additionalProperties: false
+                            properties:
+                                password: { type: string }
+            responses:
+                "200":
+                    description: Signed in
+                    content:
+                        application/json:
+                            schema: { $ref: "#/components/schemas/Session" }
+                "400": { $ref: "#/components/responses/Error" }
+                "401": { $ref: "#/components/responses/Error" }
+                "429": { $ref: "#/components/responses/Error" }
+    /auth/google:
+        post:
+            operationId: signIn
+            summary: Trade a Google ID token for a session token
+            description: |
+                Only accounts on the server's allow-list get a token. Answers 404 when the server has
+                no Google client configured. Limited to 10 attempts per 10 minutes per address.
+            security: []
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            type: object
+                            required: [credential]
+                            additionalProperties: false
+                            properties:
+                                credential:
+                                    type: string
+                                    description: The ID token from Google Identity Services
+            responses:
+                "200":
+                    description: Signed in
+                    content:
+                        application/json:
+                            schema: { $ref: "#/components/schemas/Session" }
+                "400": { $ref: "#/components/responses/Error" }
+                "401":
+                    description: Google did not vouch for this token
+                    content:
+                        application/json:
+                            schema: { $ref: "#/components/schemas/Error" }
+                "403":
+                    description: The account is not on the allow-list
+                    content:
+                        application/json:
+                            schema: { $ref: "#/components/schemas/Error" }
+                "429": { $ref: "#/components/responses/Error" }
+                "502":
+                    description: Google could not be reached
+                    content:
+                        application/json:
+                            schema: { $ref: "#/components/schemas/Error" }
+    /me:
+        get:
+            operationId: me
+            summary: The signed-in account
+            responses:
+                "200":
+                    description: The account the token belongs to
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                                required: [email]
+                                properties:
+                                    email: { type: string }
+                "401": { $ref: "#/components/responses/Error" }
+    /conversations:
+        get:
+            operationId: listConversations
+            summary: Your conversations, most recently active first
+            responses:
+                "200":
+                    description: The list
+                    content:
+                        application/json:
+                            schema:
+                                type: array
+                                items: { $ref: "#/components/schemas/Conversation" }
+                "401": { $ref: "#/components/responses/Error" }
+        post:
+            operationId: createConversation
+            summary: Start an empty conversation
+            description: It is named after its first message.
+            responses:
+                "201":
+                    description: Created
+                    content:
+                        application/json:
+                            schema: { $ref: "#/components/schemas/Conversation" }
+                "401": { $ref: "#/components/responses/Error" }
+    /conversations/{id}:
+        parameters:
+            - $ref: "#/components/parameters/ConversationId"
+        get:
+            operationId: getConversation
+            summary: One conversation
+            responses:
+                "200":
+                    description: The conversation
+                    content:
+                        application/json:
+                            schema: { $ref: "#/components/schemas/Conversation" }
+                "401": { $ref: "#/components/responses/Error" }
+                "404": { $ref: "#/components/responses/Error" }
+        delete:
+            operationId: deleteConversation
+            summary: Delete a conversation with its messages and photos
+            responses:
+                "204": { description: Deleted }
+                "401": { $ref: "#/components/responses/Error" }
+                "404": { $ref: "#/components/responses/Error" }
+    /conversations/{id}/messages:
+        parameters:
+            - $ref: "#/components/parameters/ConversationId"
+        get:
+            operationId: listMessages
+            summary: The messages of a conversation, oldest first
+            responses:
+                "200":
+                    description: The messages; photos are listed by id, fetch the bytes from /images/{id}
+                    content:
+                        application/json:
+                            schema:
+                                type: array
+                                items: { $ref: "#/components/schemas/Message" }
+                "401": { $ref: "#/components/responses/Error" }
+                "404": { $ref: "#/components/responses/Error" }
+        post:
+            operationId: sendMessage
+            summary: Send a message and stream the answer
+            description: |
+                Answers as Server-Sent Events. Read it with `fetch` and a stream reader —
+                `EventSource` cannot send the Authorization header.
+
+                The model is also shown your current pantry and your 15 most recent journal
+                entries, read from the database at send time and attached to this message only —
+                they are never stored in the conversation.
+
+                The exchange is stored only after the answer completes, so an `error` event
+                or a dropped connection leaves the conversation unchanged. Limited to 30
+                messages per 10 minutes per account.
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema: { $ref: "#/components/schemas/SendMessage" }
+            responses:
+                "200":
+                    description: |
+                        An event stream of `delta` events (`{"text": string}`), then one `done`
+                        (`{"messageId": integer, "title": string, "stopReason": "end_turn" | "max_tokens"}`)
+                        or one `error` (`{"error": string}`).
+                    content:
+                        text/event-stream:
+                            schema: { type: string }
+                "400": { $ref: "#/components/responses/Error" }
+                "401": { $ref: "#/components/responses/Error" }
+                "404": { $ref: "#/components/responses/Error" }
+                "413": { $ref: "#/components/responses/Error" }
+                "429": { $ref: "#/components/responses/Error" }
+    /ingredients:
+        get:
+            operationId: listIngredients
+            summary: Your pantry, alphabetically
+            description: Everything you buy, in stock or not. Items stay when they run out.
+            responses:
+                "200":
+                    description: The pantry
+                    content:
+                        application/json:
+                            schema:
+                                type: array
+                                items: { $ref: "#/components/schemas/Ingredient" }
+                "401": { $ref: "#/components/responses/Error" }
+        post:
+            operationId: addIngredients
+            summary: Add ingredients from a pasted list
+            description: |
+                Splits `text` on commas, semicolons and line breaks. Names are lowercased and
+                duplicates dropped. An ingredient already in the pantry is switched back **on**,
+                so typing "milk" again means you bought milk. Answers with the whole pantry.
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            type: object
+                            required: [text]
+                            additionalProperties: false
+                            properties:
+                                text: { type: string, examples: ["eggs, rice\ntomatoes"] }
+            responses:
+                "200":
+                    description: The pantry after the change
+                    content:
+                        application/json:
+                            schema:
+                                type: array
+                                items: { $ref: "#/components/schemas/Ingredient" }
+                "400": { $ref: "#/components/responses/Error" }
+                "401": { $ref: "#/components/responses/Error" }
+    /ingredients/{id}:
+        parameters:
+            - name: id
+              in: path
+              required: true
+              schema: { type: integer, format: int64 }
+        patch:
+            operationId: updateIngredient
+            summary: Switch an ingredient on or off
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            type: object
+                            required: [inStock]
+                            additionalProperties: false
+                            properties:
+                                inStock: { type: boolean }
+            responses:
+                "200":
+                    description: The ingredient
+                    content:
+                        application/json:
+                            schema: { $ref: "#/components/schemas/Ingredient" }
+                "400": { $ref: "#/components/responses/Error" }
+                "401": { $ref: "#/components/responses/Error" }
+                "404": { $ref: "#/components/responses/Error" }
+        delete:
+            operationId: deleteIngredient
+            summary: Remove an ingredient from the pantry for good
+            responses:
+                "204": { description: Removed }
+                "401": { $ref: "#/components/responses/Error" }
+                "404": { $ref: "#/components/responses/Error" }
+    /journal:
+        get:
+            operationId: listJournal
+            summary: Dishes you have cooked, most recently cooked first
+            description: Up to 200 entries.
+            responses:
+                "200":
+                    description: The journal
+                    content:
+                        application/json:
+                            schema:
+                                type: array
+                                items: { $ref: "#/components/schemas/JournalEntry" }
+                "401": { $ref: "#/components/responses/Error" }
+        post:
+            operationId: addJournalEntry
+            summary: Record a dish and how it went
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema: { $ref: "#/components/schemas/NewJournalEntry" }
+            responses:
+                "201":
+                    description: Saved
+                    content:
+                        application/json:
+                            schema: { $ref: "#/components/schemas/JournalEntry" }
+                "400": { $ref: "#/components/responses/Error" }
+                "401": { $ref: "#/components/responses/Error" }
+    /journal/{id}:
+        delete:
+            operationId: deleteJournalEntry
+            summary: Delete a journal entry
+            parameters:
+                - name: id
+                  in: path
+                  required: true
+                  schema: { type: integer, format: int64 }
+            responses:
+                "204": { description: Deleted }
+                "401": { $ref: "#/components/responses/Error" }
+                "404": { $ref: "#/components/responses/Error" }
+    /images/{id}:
+        get:
+            operationId: getImage
+            summary: The bytes of a photo you sent
+            parameters:
+                - name: id
+                  in: path
+                  required: true
+                  schema: { type: integer, format: int64 }
+            responses:
+                "200":
+                    description: The photo
+                    content:
+                        image/jpeg: { schema: { type: string, format: binary } }
+                        image/png: { schema: { type: string, format: binary } }
+                        image/gif: { schema: { type: string, format: binary } }
+                        image/webp: { schema: { type: string, format: binary } }
+                "401": { $ref: "#/components/responses/Error" }
+                "404": { $ref: "#/components/responses/Error" }
+components:
+    securitySchemes:
+        session:
+            type: http
+            scheme: bearer
+            description: The token from `POST /auth/login` or `POST /auth/google`
+    parameters:
+        ConversationId:
+            name: id
+            in: path
+            required: true
+            schema: { type: string }
+    responses:
+        Error:
+            description: Failure. The status code says which; the body carries a message.
+            content:
+                application/json:
+                    schema: { $ref: "#/components/schemas/Error" }
+    schemas:
+        Ingredient:
+            type: object
+            required: [id, name, inStock]
+            properties:
+                id: { type: integer, format: int64 }
+                name: { type: string, description: Lowercase }
+                inStock: { type: boolean }
+        JournalEntry:
+            type: object
+            required: [id, dish, cookedOn, taste, minutes, note, createdAt]
+            properties:
+                id: { type: integer, format: int64 }
+                dish: { type: string }
+                cookedOn: { type: string, format: date }
+                taste: { type: integer, minimum: 1, maximum: 5 }
+                minutes: { type: [integer, "null"], description: How long it took, if recorded }
+                note: { type: string }
+                createdAt: { type: string, format: date-time }
+        NewJournalEntry:
+            type: object
+            required: [dish, taste]
+            additionalProperties: false
+            properties:
+                dish: { type: string, maxLength: 100 }
+                taste: { type: integer, minimum: 1, maximum: 5 }
+                minutes: { type: integer, minimum: 1, maximum: 1440, description: How long it took, start to plate }
+                note: { type: string, maxLength: 500 }
+                cookedOn:
+                    type: string
+                    format: date
+                    description: Defaults to today; may not be in the future
+        Session:
+            type: object
+            required: [token, expiresAt, email]
+            properties:
+                token: { type: string }
+                expiresAt: { type: string, format: date-time }
+                email: { type: string }
+        Error:
+            type: object
+            required: [error]
+            properties:
+                error: { type: string }
+        Conversation:
+            type: object
+            required: [id, title, createdAt, updatedAt]
+            properties:
+                id: { type: string }
+                title: { type: string, description: Empty until the first message is answered }
+                createdAt: { type: string, format: date-time }
+                updatedAt: { type: string, format: date-time }
+        Message:
+            type: object
+            required: [id, role, text, images, createdAt]
+            properties:
+                id: { type: integer, format: int64 }
+                role: { type: string, enum: [user, assistant] }
+                text: { type: string }
+                images:
+                    type: array
+                    items:
+                        type: object
+                        required: [id, mediaType]
+                        properties:
+                            id: { type: integer, format: int64 }
+                            mediaType: { type: string }
+                createdAt: { type: string, format: date-time }
+        SendMessage:
+            type: object
+            additionalProperties: false
+            description: Needs text, at least one image, or both. The body may be up to 24 MiB.
+            properties:
+                text: { type: string, maxLength: 8000 }
+                images:
+                    type: array
+                    maxItems: 4
+                    items:
+                        type: object
+                        required: [mediaType, data]
+                        additionalProperties: false
+                        properties:
+                            mediaType:
+                                type: string
+                                enum: [image/jpeg, image/png, image/gif, image/webp]
+                                description: Must match what the bytes actually are
+                            data:
+                                type: string
+                                contentEncoding: base64
+                                description: Up to 5 MiB decoded

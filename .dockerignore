@@ -1,0 +1,11 @@
+.git
+.github
+.env
+.env.development
+*.db
+*.md
+Caddyfile
+Dockerfile
+Makefile
+deploy.sh
+docker-compose.yaml

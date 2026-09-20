@@ -1,0 +1,19 @@
+services:
+    cookd-api:
+        container_name: cookd-api
+        image: cookd-api
+        build: .
+        env_file: .env
+        environment:
+            PORT: 50001
+            DB_PATH: /data/cookd.db
+        # Loopback only: the API is reached through Caddy. Docker bypasses
+        # host firewalls, so a bare "50001:50001" would expose it publicly.
+        ports:
+            - "127.0.0.1:50001:50001"
+        volumes:
+            - cookd-data:/data
+        restart: unless-stopped
+
+volumes:
+    cookd-data:

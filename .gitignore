@@ -1,0 +1,9 @@
+/bin
+
+.env
+.env.development
+.claude/settings.local.json
+*.db
+*.db-shm
+*.db-wal
+coverage.out

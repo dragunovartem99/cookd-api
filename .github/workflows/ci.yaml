@@ -24,8 +24,10 @@ jobs:
                       exit 1
                   fi
 
-            - name: Check file size
-              run: scripts/check-file-size.sh
+            - name: Lint
+              uses: golangci/golangci-lint-action@v8
+              with:
+                  version: v2.13
 
             - name: Vet
               run: go vet ./...

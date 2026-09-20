@@ -2,7 +2,7 @@
 
 # check is what CI runs.
 .PHONY: check
-check: fmt-check size vet test
+check: fmt-check lint vet test
 
 .PHONY: fmt
 fmt:
@@ -13,9 +13,9 @@ fmt-check:
 	@unformatted=$$(gofmt -l .); \
 	if [ -n "$$unformatted" ]; then echo "gofmt needed:"; echo "$$unformatted"; exit 1; fi
 
-.PHONY: size
-size:
-	@scripts/check-file-size.sh
+.PHONY: lint
+lint:
+	golangci-lint run
 
 .PHONY: vet
 vet:

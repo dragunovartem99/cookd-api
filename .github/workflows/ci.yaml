@@ -24,6 +24,9 @@ jobs:
                       exit 1
                   fi
 
+            - name: Check file size
+              run: scripts/check-file-size.sh
+
             - name: Vet
               run: go vet ./...
 

@@ -95,10 +95,14 @@ $ curl -N -X POST localhost:50001/conversations/$ID/messages \
 
 ## Deploying
 
-Pushing to `main` runs `.github/workflows/deploy.yaml`, which SSHes to the VPS and runs
-[`deploy.sh`](deploy.sh): Caddy serves `cookd.dragunov.dev` and proxies to the container on
-`127.0.0.1:50001`. The database lives in the `cookd-data` Docker volume.
+Pushing to `main` runs `.github/workflows/deploy.yaml` (it can also be started by hand from the
+Actions tab). The workflow tests and **builds the binary on GitHub's runner**, uploads it to the VPS
+with rsync, then SSHes in to run [`deploy.sh`](deploy.sh). The SQLite driver is a very large pure-Go
+package, so compiling it on the VPS took minutes; the `Dockerfile` now only copies the finished binary
+into a distroless image. Caddy serves `cookd.dragunov.dev` and proxies to the container on
+`127.0.0.1:50001`, and the database lives in the `cookd-data` Docker volume.
 
 The workflow needs the repository secrets `VPS_HOST`, `VPS_USER`, `VPS_SSH_KEY` and
 `VPS_PROJECT_PATH`, and the project directory on the VPS needs a `.env` with the variables above
-(`ALLOWED_ORIGIN` is the UI's origin, e.g. `https://dragunovartem99.github.io`).
+(`ALLOWED_ORIGIN` is the UI's origin, e.g. `https://dragunovartem99.github.io`). The binary is built
+for linux/amd64; change `GOARCH` in the workflow if the server is ARM.

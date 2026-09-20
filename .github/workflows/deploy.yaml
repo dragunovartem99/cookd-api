@@ -3,22 +3,56 @@ name: Deploy
 on:
     push:
         branches: [main]
+    # Lets a deploy be started by hand from the Actions tab.
+    workflow_dispatch:
 
 jobs:
     deploy:
+        # One deploy at a time: they share a directory and a container.
+        concurrency:
+            group: deploy-production
+            cancel-in-progress: false
         runs-on: ubuntu-latest
+        env:
+            SSH_TARGET: ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}
+            PROJECT_PATH: ${{ secrets.VPS_PROJECT_PATH }}
         steps:
-            - name: Deploy to VPS
-              uses: appleboy/ssh-action@v1
+            - uses: actions/checkout@v4
+
+            - uses: actions/setup-go@v5
               with:
-                  host: ${{ secrets.VPS_HOST }}
-                  username: ${{ secrets.VPS_USER }}
-                  key: ${{ secrets.VPS_SSH_KEY }}
-                  script: |
-                      set -e
-                      cd ${{ secrets.VPS_PROJECT_PATH }}
-                      # The checkout is a deploy target, never a place to commit from:
-                      # reset to the pushed tip so local drift can't block a deploy.
-                      git fetch origin
-                      git reset --hard origin/main
-                      ./deploy.sh
+                  go-version-file: go.mod
+                  cache: true
+
+            - name: Test
+              run: go test ./...
+
+            # Built here, not on the VPS: compiling the SQLite driver there took minutes.
+            # Static (no CGO) for linux/amd64, so it runs in the distroless image as is.
+            - name: Build
+              run: CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags="-s -w" -o bin/cookd-api ./cmd/cookd-api
+
+            - uses: webfactory/ssh-agent@v0.10.0
+              with:
+                  ssh-private-key: ${{ secrets.VPS_SSH_KEY }}
+
+            - name: Upload binary
+              run: |
+                  set -eu
+                  ssh -o StrictHostKeyChecking=accept-new "$SSH_TARGET" "mkdir -p '$PROJECT_PATH/bin'"
+                  rsync -az -e "ssh -o StrictHostKeyChecking=accept-new" \
+                      bin/cookd-api "$SSH_TARGET:$PROJECT_PATH/bin/"
+
+            # The checkout on the server is a deploy target, never a place to commit from:
+            # reset to the pushed tip so local drift can't block a deploy. The binary sits in
+            # bin/, which git ignores, so the reset leaves it alone.
+            - name: Deploy
+              run: |
+                  ssh -o StrictHostKeyChecking=accept-new "$SSH_TARGET" \
+                      "PROJECT_PATH='$PROJECT_PATH' sh -s" <<'SCRIPT'
+                  set -eu
+                  cd "$PROJECT_PATH"
+                  git fetch origin
+                  git reset --hard origin/main
+                  ./deploy.sh
+                  SCRIPT

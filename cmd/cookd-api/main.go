@@ -20,7 +20,6 @@ import (
 	"github.com/dragunovartem99/cookd-api/internal/auth"
 	"github.com/dragunovartem99/cookd-api/internal/chat"
 	"github.com/dragunovartem99/cookd-api/internal/config"
-	"github.com/dragunovartem99/cookd-api/internal/recipes"
 	"github.com/dragunovartem99/cookd-api/internal/store"
 )
 
@@ -58,15 +57,9 @@ func run(log *slog.Logger) error {
 	}
 	defer db.Close()
 
-	// Left nil, not wrapped, when off, for the same reason as Google below.
-	var lookup chat.Recipes
-	if cfg.SpoonacularKey != "" {
-		lookup = recipes.NewClient(cfg.SpoonacularKey)
-	}
-
 	opts := api.Options{
 		Store:         db,
-		Chat:          chat.NewClaude(cfg.AnthropicKey, lookup),
+		Chat:          chat.NewClaude(cfg.AnthropicKey),
 		Signer:        auth.NewSigner(cfg.SessionSecret),
 		AdminPassword: cfg.AdminPassword,
 		Owner:         cfg.Owner,

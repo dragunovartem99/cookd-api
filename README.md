@@ -91,13 +91,14 @@ $ curl -N -X POST localhost:50001/conversations/$ID/messages \
     -d '{"text": "I have eggs, rice and a sad tomato. Dinner?"}'
 ```
 
-`make` runs formatting, vet and the tests — what CI runs on pull requests.
+`make` runs formatting, lint, vet and the tests — what CI runs.
 
-## Deploying
+## Deployment
 
-Pushing to `main` runs `.github/workflows/deploy.yaml` (it can also be started by hand from the
-Actions tab). The workflow tests and **builds the binary on GitHub's runner**, uploads it to the VPS
-with rsync, then SSHes in to run [`deploy.sh`](deploy.sh). The SQLite driver is a very large pure-Go
+Pull requests run `fmt-check`, `lint`, `vet` and `test` through
+[pipes](https://github.com/dragunovartem99/pipes). Merging to `main` (or a manual run from the Actions
+tab) runs the same checks, then pipes `deploy-vps` **builds the binary on GitHub's runner**, uploads it
+to the VPS with rsync, resets the checkout there to the commit and runs [`deploy.sh`](deploy.sh). The SQLite driver is a very large pure-Go
 package, so compiling it on the VPS took minutes; the `Dockerfile` now only copies the finished binary
 into a distroless image. Caddy serves `cookd.dragunov.dev` and proxies to the container on
 `127.0.0.1:50001`, and the database lives in the `cookd-data` Docker volume.

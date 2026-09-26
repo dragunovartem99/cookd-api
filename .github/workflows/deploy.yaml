@@ -6,13 +6,9 @@ on:
     workflow_dispatch:
 
 jobs:
-    ci:
-        uses: ./.github/workflows/ci.yaml
-
     # The binary is built on the runner, not the VPS: compiling the SQLite driver there took
     # minutes. Static (no CGO) for linux/amd64, so it runs in the distroless image as is.
     pipes:
-        needs: ci
         uses: dragunovartem99/pipes/.github/workflows/deploy-vps.yaml@v1.2.0
         with:
             setup: go

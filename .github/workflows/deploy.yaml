@@ -13,7 +13,7 @@ jobs:
     # minutes. Static (no CGO) for linux/amd64, so it runs in the distroless image as is.
     pipes:
         needs: ci
-        uses: dragunovartem99/pipes/.github/workflows/deploy-vps.yaml@v1.0.1
+        uses: dragunovartem99/pipes/.github/workflows/deploy-vps.yaml@v1.2.0
         with:
             setup: go
             build: 'CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags="-s -w" -o bin/cookd-api ./cmd/cookd-api'

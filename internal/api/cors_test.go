@@ -25,7 +25,7 @@ func TestCORS(t *testing.T) {
 		t.Error("preflight does not allow PATCH")
 	}
 
-	foreign :=httptest.NewRequest("OPTIONS", "/conversations", nil)
+	foreign := httptest.NewRequest("OPTIONS", "/conversations", nil)
 	foreign.Header.Set("Origin", "https://evil.example")
 	rec = httptest.NewRecorder()
 	h.handler.ServeHTTP(rec, foreign)

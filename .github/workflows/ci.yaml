@@ -6,4 +6,4 @@ on:
 
 jobs:
     pipes:
-        uses: dragunovartem99/pipes/.github/workflows/ci-go.yaml@v1.2.0
+        uses: dragunovartem99/pipes/.github/workflows/ci-go.yaml@v1.3.0

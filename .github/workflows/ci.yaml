@@ -6,4 +6,8 @@ on:
 
 jobs:
     pipes:
-        uses: dragunovartem99/pipes/.github/workflows/ci-go.yaml@v2.0.0
+        uses: dragunovartem99/pipes/.github/workflows/ci-checks.yaml@v3.0.0
+        with:
+            setup: go
+            runner: make
+            checks: '["fmt-check", "lint", "vet", "test"]'

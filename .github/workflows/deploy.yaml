@@ -9,7 +9,7 @@ jobs:
     # The binary is built on the runner, not the VPS: compiling the SQLite driver there took
     # minutes. Static (no CGO) for linux/amd64, so it runs in the distroless image as is.
     pipes:
-        uses: dragunovartem99/pipes/.github/workflows/deploy-vps.yaml@v2.0.0
+        uses: dragunovartem99/pipes/.github/workflows/deploy-vps.yaml@v3.0.0
         with:
             setup: go
             build: 'CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags="-s -w" -o bin/cookd-api ./cmd/cookd-api'

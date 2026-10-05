@@ -15,7 +15,7 @@ fmt-check:
 
 .PHONY: lint
 lint:
-	golangci-lint run
+	go tool -modfile=tools/go.mod golangci-lint run
 
 .PHONY: vet
 vet:

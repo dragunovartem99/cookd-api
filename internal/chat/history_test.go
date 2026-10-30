@@ -72,3 +72,15 @@ func TestBuildInputDropsOldPhotos(t *testing.T) {
 		t.Errorf("latest photo missing")
 	}
 }
+
+func TestBuildInputUsesOutputTextForAssistantHistory(t *testing.T) {
+	input := buildInput([]store.Message{
+		{Role: "user", Text: "question"},
+		{Role: "assistant", Text: "answer"},
+		{Role: "user", Text: "follow-up"},
+	}, Memory{})
+	parts := input[1].Content.([]inputPart)
+	if input[1].Role != "assistant" || len(parts) != 1 || parts[0].Type != "output_text" || parts[0].Text != "answer" {
+		t.Errorf("assistant history = %+v, want output_text answer", input[1])
+	}
+}

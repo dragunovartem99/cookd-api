@@ -45,18 +45,18 @@ func TestRecentTrimsInJumps(t *testing.T) {
 	}
 }
 
-func TestToParamsDropsOldPhotos(t *testing.T) {
+func TestBuildInputDropsOldPhotos(t *testing.T) {
 	img := []store.Image{{MediaType: "image/jpeg", Data: []byte{1}}}
 	h := conversation(7)
 	h[0].Images, h[4].Images, h[6].Images = img, img, img
 
-	params := toParams(h, Memory{})
+	params := buildInput(h, Memory{})
 	photos := func(n int) (images, notes int) {
-		for _, b := range params[n].Content {
-			if b.OfImage != nil {
+		for _, b := range params[n].Content.([]inputPart) {
+			if b.Type == "input_image" {
 				images++
 			}
-			if b.OfText != nil && b.OfText.Text == "[1 photo(s) sent here, no longer shown]" {
+			if b.Type == "input_text" && b.Text == "[1 photo(s) sent here, no longer shown]" {
 				notes++
 			}
 		}

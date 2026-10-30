@@ -25,8 +25,10 @@ type Config struct {
 	AllowedOrigin string
 	// DBPath is the SQLite file conversations are kept in.
 	DBPath string
-	// AnthropicKey authenticates calls to the Claude API.
-	AnthropicKey string
+	// OpenAIKey authenticates calls to the OpenAI API.
+	OpenAIKey string
+	// OpenAIModel selects the model; defaults to the repo's standard model.
+	OpenAIModel string
 	// GoogleClientID is the OAuth client the sign-in button is issued for; an ID
 	// token minted for any other audience is refused. Optional: blank turns
 	// Google sign-in off.
@@ -58,10 +60,14 @@ func Load() (Config, error) {
 	cfg := Config{
 		AllowedOrigin:  required("ALLOWED_ORIGIN"),
 		DBPath:         required("DB_PATH"),
-		AnthropicKey:   required("ANTHROPIC_API_KEY"),
+		OpenAIKey:      required("OPENAI_API_KEY"),
+		OpenAIModel:    strings.TrimSpace(os.Getenv("OPENAI_MODEL")),
 		GoogleClientID: strings.TrimSpace(os.Getenv("GOOGLE_CLIENT_ID")),
 		AdminPassword:  os.Getenv("ADMIN_PASSWORD"),
 		AllowedEmails:  make(map[string]struct{}),
+	}
+	if cfg.OpenAIModel == "" {
+		cfg.OpenAIModel = "gpt-6-luna"
 	}
 	secret := required("SESSION_SECRET")
 	emails := required("ALLOWED_EMAILS")

@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
     title: cookd-api
     description: |
-        A cooking coach. Send ingredients or photos, get recipes and advice streamed back from Claude.
+        A cooking coach. Send ingredients or photos, get recipes and advice streamed back from OpenAI.
         Sign in once (password, or Google if the server has it switched on), then call everything
         else with the session token as a bearer token.
     version: 1.0.0

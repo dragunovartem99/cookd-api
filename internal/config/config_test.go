@@ -8,13 +8,13 @@ import (
 func setEnv(t *testing.T, overrides map[string]string) {
 	t.Helper()
 	env := map[string]string{
-		"ALLOWED_ORIGIN":    "https://ui.example",
-		"DB_PATH":           "/tmp/cookd.db",
-		"ANTHROPIC_API_KEY": "sk-test",
-		"GOOGLE_CLIENT_ID":  "client",
-		"SESSION_SECRET":    strings.Repeat("s", 32),
-		"ALLOWED_EMAILS":    " Me@Example.com, other@example.com ,",
-		"PORT":              "50001",
+		"ALLOWED_ORIGIN":   "https://ui.example",
+		"DB_PATH":          "/tmp/cookd.db",
+		"OPENAI_API_KEY":   "sk-test",
+		"GOOGLE_CLIENT_ID": "client",
+		"SESSION_SECRET":   strings.Repeat("s", 32),
+		"ALLOWED_EMAILS":   " Me@Example.com, other@example.com ,",
+		"PORT":             "50001",
 	}
 	for k, v := range overrides {
 		env[k] = v
@@ -50,9 +50,9 @@ func TestLoadPasswordOnly(t *testing.T) {
 }
 
 func TestLoadReportsEveryMissingVariable(t *testing.T) {
-	setEnv(t, map[string]string{"ANTHROPIC_API_KEY": "", "DB_PATH": ""})
+	setEnv(t, map[string]string{"OPENAI_API_KEY": "", "DB_PATH": ""})
 	_, err := Load()
-	if err == nil || !strings.Contains(err.Error(), "ANTHROPIC_API_KEY") || !strings.Contains(err.Error(), "DB_PATH") {
+	if err == nil || !strings.Contains(err.Error(), "OPENAI_API_KEY") || !strings.Contains(err.Error(), "DB_PATH") {
 		t.Fatalf("err = %v, want both missing variables named", err)
 	}
 }

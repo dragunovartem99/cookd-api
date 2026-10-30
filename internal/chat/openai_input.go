@@ -40,6 +40,13 @@ func buildInput(history []store.Message, memory Memory) []inputMessage {
 		if role != "assistant" {
 			role = "user"
 		}
+		if role == "assistant" {
+			for i := range parts {
+				if parts[i].Type == "input_text" {
+					parts[i].Type = "output_text"
+				}
+			}
+		}
 		input = append(input, inputMessage{Role: role, Content: parts})
 	}
 	return input

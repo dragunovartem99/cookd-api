@@ -1,5 +1,5 @@
 // Command cookd-api serves the API behind cookd.dragunov.dev: a cooking coach
-// that answers from ingredients and photos, streamed from Claude.
+// that answers from ingredients and photos, streamed from OpenAI.
 //
 // `cookd-api token <email>` prints a session token for that address, signed
 // with SESSION_SECRET — the way to call the API from curl without Google.
@@ -59,7 +59,7 @@ func run(log *slog.Logger) error {
 
 	opts := api.Options{
 		Store:         db,
-		Chat:          chat.NewClaude(cfg.AnthropicKey),
+		Chat:          chat.NewOpenAI(cfg.OpenAIKey, cfg.OpenAIModel),
 		Signer:        auth.NewSigner(cfg.SessionSecret),
 		AdminPassword: cfg.AdminPassword,
 		Owner:         cfg.Owner,

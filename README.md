@@ -1,9 +1,9 @@
 # cookd-api
 
 Backend for **cookd**, a cooking coach you learn from: tell it what's in your fridge, send a photo,
-and talk it through. Answers stream from Claude (`claude-sonnet-5`).
+and talk it through. Answers stream from OpenAI (`gpt-6-luna` by default).
 
-Written in Go against the standard library; the Anthropic SDK, `modernc.org/sqlite` (pure Go, so no
+Written in Go against the standard library; `modernc.org/sqlite` (pure Go, so no
 CGO) and `golang.org/x/time/rate` are the only dependencies.
 
 ## API

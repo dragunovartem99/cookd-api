@@ -71,13 +71,13 @@ func TestMemoryBlockNeutralisesMarkup(t *testing.T) {
 
 // Memory rides on the last message only: earlier turns are untouched, so the
 // cached prefix survives a change to the pantry.
-func TestToParamsPlacesMemoryOnLastMessage(t *testing.T) {
+func TestBuildInputPlacesMemoryOnLastMessage(t *testing.T) {
 	history := []store.Message{
 		{Role: "user", Text: "first question"},
 		{Role: "assistant", Text: "first answer"},
 		{Role: "user", Text: "second question", Images: []store.Image{{MediaType: "image/png", Data: []byte("x")}}},
 	}
-	params := toParams(history, Memory{Ingredients: []store.Ingredient{{Name: "eggs", InStock: true}}})
+	params := buildInput(history, Memory{Ingredients: []store.Ingredient{{Name: "eggs", InStock: true}}})
 
 	raw, _ := json.Marshal(params)
 	// The JSON encoder escapes angle brackets, so look for the text inside the tags.
@@ -91,7 +91,7 @@ func TestToParamsPlacesMemoryOnLastMessage(t *testing.T) {
 	}
 
 	last, _ := json.Marshal(params[2])
-	image, pantry, question := strings.Index(string(last), `"image"`), strings.Index(string(last), "Available"), strings.Index(string(last), "second question")
+	image, pantry, question := strings.Index(string(last), `"input_image"`), strings.Index(string(last), "Available"), strings.Index(string(last), "second question")
 	if !(image >= 0 && image < pantry && pantry < question) {
 		t.Errorf("last message order is wrong (image %d, pantry %d, question %d):\n%s", image, pantry, question, last)
 	}

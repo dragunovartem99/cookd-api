@@ -16,7 +16,7 @@ type Google interface {
 	Verify(ctx context.Context, idToken string) (string, error)
 }
 
-// Chat streams a Claude reply to a conversation.
+// Chat streams a model reply to a conversation.
 type Chat interface {
 	Stream(ctx context.Context, history []store.Message, memory chat.Memory, onDelta func(string)) (chat.Result, error)
 }

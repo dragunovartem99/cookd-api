@@ -12,7 +12,7 @@ const (
 	maxMessageBody = 24 << 20
 	maxText        = 8000
 	maxImages      = 4
-	// maxImageBytes is the Claude API's per-image limit.
+	// maxImageBytes is the model API's per-image limit.
 	maxImageBytes = 5 << 20
 	// messageReadTimeout is how long a slow upload gets, past the server default.
 	messageReadTimeout = 2 * time.Minute
